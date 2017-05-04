@@ -5,25 +5,33 @@ var noop = function () {}
 function Y18N (opts) {
   // configurable options.
   opts = opts || {}
-  this.writeLocal = !!opts.writeLocalUpdates
-  this.locale = opts.locale || 'en'
-  this.fallbackToLanguage = opts.fallbackToLanguage !== false
+  this._writeLocalUpdates = !!opts.writeLocalUpdates
+  this._locale = opts.locale || 'en'
+  this._fallbackToLanguage = opts.fallbackToLanguage !== false
 
   // internal stuff.
-  this.cache = opts.sources || {}
-  this.writeQueue = []
-  this.localStorage = opts.localStorage || window.localStorage
+  this._localStorage = opts.localStorage || window.localStorage
+  this._cache = {}
 
-  if (this.writeLocal) {
+  // clone of input sources for cache
+  var sources = opts.sources || {}
+  Object.keys(sources).forEach(function (locale) {
+    this._cache[locale] = {}
+    Object.keys(sources[locale]).forEach(function (key) {
+      this._cache[locale][key] = sources[locale][key]
+    }, this)
+  }, this)
+
+  if (this._writeLocalUpdates) {
     var localData
     var sourceData
     var sourceIsUpdated = false
-    Object.keys(this.cache).forEach(function (locale) {
-      sourceData = this.cache[locale]
+    Object.keys(this._cache).forEach(function (locale) {
+      sourceData = this._cache[locale]
       sourceIsUpdated = false
       try {
         // grab from local storage
-        localData = JSON.parse(this.localStorage['y18n-' + locale])
+        localData = JSON.parse(this._localStorage['y18n-' + locale])
         sourceIsUpdated = Object.keys(localData).every(function (key) {
           return key in sourceData
         })
@@ -35,16 +43,18 @@ function Y18N (opts) {
       // the source has all the latest keys for this locale,
       // delete from local storage
       if (sourceIsUpdated) {
-        delete this.localStorage['y18n-' + locale]
+        delete this._localStorage['y18n-' + locale]
       // local data still has entries we don't have in source,
       // merge the two, update local storage and cache
       } else {
-        // apply source data over local storage data
-        Object.keys(sourceData).forEach(function (key) {
-          localData[key] = sourceData[key]
+        // apply local storage data over source data if it doesn't exist
+        Object.keys(localData).forEach(function (key) {
+          if (!(key in sourceData)) {
+            sourceData[key] = localData[key]
+          }
         })
-        this.localStorage['y18n-' + locale] = JSON.stringify(localData, null, 2)
-        this.cache[locale] = localData
+        this._localStorage['y18n-' + locale] = JSON.stringify(sourceData, null, '\t')
+        this._cache[locale] = sourceData
       }
     }, this)
   }
@@ -54,11 +64,13 @@ function Y18N (opts) {
   this.setLocale = this.setLocale.bind(this)
   this.getLocale = this.getLocale.bind(this)
   this.updateLocale = this.updateLocale.bind(this)
+  this.getUpdates = this.getUpdates.bind(this)
+  this.clearUpdates = this.clearUpdates.bind(this)
 }
 
 Y18N.prototype._writeLocal = function (locale, cb) {
   // write to local storage
-  this.localStorage['y18n-' + this._resolveLocaleKey(locale)] = JSON.stringify(this.cache[locale], null, 2)
+  this._localStorage['y18n-' + this._resolveLocaleKey(locale)] = JSON.stringify(this._cache[locale], null, '\t')
 
   // let __ and __n return before firing cb (also can support async writing in the future)
   setTimeout(cb, 1)
@@ -66,9 +78,9 @@ Y18N.prototype._writeLocal = function (locale, cb) {
 
 Y18N.prototype._resolveLocaleKey = function (locale) {
   // attempt fallback to language only
-  if (this.fallbackToLanguage && ~locale.lastIndexOf('_')) {
+  if (this._fallbackToLanguage && ~locale.lastIndexOf('_')) {
     var language = locale.split('_')[0]
-    if (this.cache[language]) {
+    if (this._cache[language]) {
       return language
     }
   }
@@ -76,23 +88,11 @@ Y18N.prototype._resolveLocaleKey = function (locale) {
 }
 
 Y18N.prototype._initLocale = function () {
-  const locale = this._resolveLocaleKey(this.locale)
-  if (locale !== this.locale) {
-    console.log('setting', this.locale, 'to', locale, this.cache[locale])
-    this.cache[this.locale] = this.cache[locale]
+  const locale = this._resolveLocaleKey(this._locale)
+  if (locale !== this._locale) {
+    this._cache[this._locale] = this._cache[locale]
   }
-  this.cache[this.locale] = this.cache[this.locale] || {}
-  // attempt fallback to language only
-  // console.log('initLocale', this.locale, this.fallbackToLanguage, ~this.locale.lastIndexOf('_'))
-  // if (this.fallbackToLanguage && ~this.locale.lastIndexOf('_')) {
-  //   var language = this.locale.split('_')[0]
-  //   console.log('language', language, this.locale, this.cache)
-  //   if (this.cache[language]) {
-  //     console.log('setting', this.locale, 'to', language, this.cache[language])
-  //     this.cache[this.locale] = this.cache[language]
-  //   }
-  // }
-  // this.cache[this.locale] = this.cache[this.locale] || {}
+  this._cache[this._locale] = this._cache[this._locale] || {}
 }
 
 Y18N.prototype.__ = function () {
@@ -103,21 +103,21 @@ Y18N.prototype.__ = function () {
   if (typeof args[args.length - 1] === 'function') cb = args.pop()
   cb = cb || noop // noop.
 
-  if (!this.cache[this.locale]) this._initLocale()
+  if (!this._cache[this._locale]) this._initLocale()
 
   // we've observed a new string, update the language file.
-  if (!this.cache[this.locale][str] && this.writeLocal) {
-    this.cache[this.locale][str] = str
+  if (!this._cache[this._locale][str] && this._writeLocalUpdates) {
+    this._cache[this._locale][str] = str
 
     // include the current directory and locale,
     // since these values could change before the
     // write is performed.
-    this._writeLocal(this.locale, cb)
+    this._writeLocal(this._locale, cb)
   } else {
     cb()
   }
 
-  return vsprintf(this.cache[this.locale][str] || str, args)
+  return vsprintf(this._cache[this._locale][str] || str, args)
 }
 
 Y18N.prototype.__n = function () {
@@ -129,16 +129,16 @@ Y18N.prototype.__n = function () {
   var cb = noop // start with noop.
   if (typeof args[args.length - 1] === 'function') cb = args.pop()
 
-  if (!this.cache[this.locale]) this._initLocale()
+  if (!this._cache[this._locale]) this._initLocale()
 
   var str = quantity === 1 ? singular : plural
-  if (this.cache[this.locale][singular]) {
-    str = this.cache[this.locale][singular][quantity === 1 ? 'one' : 'other']
+  if (this._cache[this._locale][singular]) {
+    str = this._cache[this._locale][singular][quantity === 1 ? 'one' : 'other']
   }
 
   // we've observed a new string, update the language file.
-  if (!this.cache[this.locale][singular] && this.writeLocal) {
-    this.cache[this.locale][singular] = {
+  if (!this._cache[this._locale][singular] && this._writeLocalUpdates) {
+    this._cache[this._locale][singular] = {
       one: singular,
       other: plural
     }
@@ -146,7 +146,7 @@ Y18N.prototype.__n = function () {
     // include the current directory and locale,
     // since these values could change before the
     // write is performed.
-    this._writeLocal(this.locale, cb)
+    this._writeLocal(this._locale, cb)
   } else {
     cb()
   }
@@ -160,19 +160,31 @@ Y18N.prototype.__n = function () {
 }
 
 Y18N.prototype.setLocale = function (locale) {
-  this.locale = locale
+  this._locale = locale
 }
 
 Y18N.prototype.getLocale = function () {
-  return this.locale
+  return this._locale
 }
 
 Y18N.prototype.updateLocale = function (obj) {
-  if (!this.cache[this.locale]) this._initLocale()
+  if (!this._cache[this._locale]) this._initLocale()
 
   for (var key in obj) {
-    this.cache[this.locale][key] = obj[key]
+    this._cache[this._locale][key] = obj[key]
   }
+}
+
+Y18N.prototype.getUpdates = function (locale) {
+  locale = locale || this._locale
+
+  return this._localStorage['y18n-' + this._resolveLocaleKey(locale)]
+}
+
+Y18N.prototype.clearUpdates = function (locale) {
+  locale = locale || this._locale
+
+  delete this._localStorage['y18n-' + this._resolveLocaleKey(locale)]
 }
 
 module.exports = Y18N

@@ -98,6 +98,26 @@ What locale is currently being used?
 
 Update the current locale with the key value pairs in `obj`.
 
+## Example locale json file
+```json
+{
+  "Hello": "Hello!",
+  "Hello %s %s": "Hello %s %s",
+  "%d cat": {
+    "one": "%d cat",
+    "other": "%d cats"
+  },
+  "%d %s cat": {
+    "one": "%d %s cat",
+    "other": "%d %s cats"
+  },
+  "There is one monkey in the %s": {
+    "one": "There is one monkey in the %s",
+    "other": "There are %d monkeys in the %s"
+  }
+}
+```
+
 ## License
 
 ISC

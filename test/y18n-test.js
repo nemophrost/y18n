@@ -26,7 +26,7 @@ describe('y18n', function () {
   describe('configure', function () {
     it('allows you to override the default y18n configuration', function () {
       var y = y18n({locale: 'fr'})
-      y.locale.should.equal('fr')
+      y._locale.should.equal('fr')
     })
   })
 
@@ -131,7 +131,6 @@ describe('y18n', function () {
 
         __('banana', function (err) {
           // 'banana' should be written to local storage
-          console.log('localStoragre', localStorage)
           var locale = JSON.parse(localStorage['y18n-fr_FR'])
           locale.should.deep.equal({
             banana: 'banana'
@@ -303,6 +302,29 @@ describe('y18n', function () {
   describe('getLocale', function () {
     it('returns the configured locale', function () {
       y18n().getLocale().should.equal('en')
+    })
+  })
+
+  describe('getUpdates', function () {
+    it('returns any locally stored updates', function () {
+      localStorage = {}
+      expect(y18n().getUpdates()).to.equal(undefined)
+
+      localStorage = {'y18n-en': '{"foo": "bar"}'}
+      var u = JSON.parse(y18n().getUpdates())
+      u.foo.should.equal('bar')
+      Object.keys(u).length.should.equal(6)
+    })
+  })
+
+  describe('clearUpdates', function () {
+    it('clears any locally stored updates', function () {
+      localStorage = {'y18n-en': '{"foo": "bar"}'}
+      var u = JSON.parse(y18n().getUpdates())
+      u.foo.should.equal('bar')
+
+      y18n().clearUpdates()
+      expect(localStorage['y18n-en']).to.equal(undefined)
     })
   })
 })
