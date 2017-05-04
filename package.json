@@ -1,6 +1,6 @@
 {
   "name": "y18n-browser",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "the bare-bones internationalization library used by yargs, made browser friendly",
   "main": "index.js",
   "scripts": {
