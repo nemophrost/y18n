@@ -21,7 +21,7 @@
     "internationalization",
     "nemophrost"
   ],
-  "author": "Ben Coe <ben@npmjs.com>",
+  "author": "Alma Madsen",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/nemophrost/y18n-browser/issues"
